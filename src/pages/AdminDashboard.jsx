@@ -1,14 +1,136 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import { Line, Pie } from 'react-chartjs-2';
+import { useProductContext } from '../context/ProductContext';
 
 // Register ChartJS components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement);
 
 const AdminDashboard = () => {
+  const { products: contextProducts, addProduct, updateProduct, deleteProduct } = useProductContext();
+  
   const [activePage, setActivePage] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeSettingsTab, setActiveSettingsTab] = useState('general');
+
+  // Product Management States
+  const [productsList, setProductsList] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    description: '',
+    price: '',
+    originalPrice: '',
+    category: 'Electronics',
+    stock: '',
+    image: '',
+    badge: '',
+    badgeColor: '#dc3545'
+  });
+
+  // Update productsList when contextProducts changes
+  useEffect(() => {
+    setProductsList(contextProducts);
+  }, [contextProducts]);
+
+  // Filter products based on search
+  const filteredProducts = productsList.filter(product => 
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleDeleteClick = (product) => {
+    setProductToDelete(product);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (productToDelete) {
+      deleteProduct(productToDelete.id);
+      setShowDeleteModal(false);
+      setProductToDelete(null);
+    }
+  };
+
+  const handleEditClick = (product) => {
+    setEditingProduct(product);
+    setEditFormData({
+      name: product.name || '',
+      description: product.description || '',
+      price: product.price || '',
+      originalPrice: product.originalPrice || '',
+      category: product.category || 'Electronics',
+      stock: product.stock || '',
+      image: product.image || '',
+      badge: product.badge || '',
+      badgeColor: product.badgeColor || '#dc3545'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditSubmit = (e) => {
+  e.preventDefault();
+  
+  // Validate image URL
+  let imageUrl = editFormData.image;
+  if (!imageUrl || imageUrl.trim() === '') {
+    imageUrl = '/assets/placeholder.png';
+  } else if (!imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+    imageUrl = '/assets/' + imageUrl;
+  }
+  
+  const productData = {
+    ...editFormData,
+    image: imageUrl,
+    price: parseFloat(editFormData.price) || 0,
+    originalPrice: editFormData.originalPrice ? parseFloat(editFormData.originalPrice) : null,
+    stock: parseInt(editFormData.stock) || 0,
+    status: parseInt(editFormData.stock) > 0 ? 
+            (parseInt(editFormData.stock) < 20 ? 'Low Stock' : 'In Stock') : 
+            'Out of Stock'
+  };
+
+  if (!editingProduct) {
+    // Add new product - Use timestamp for unique ID
+    const newId = Date.now().toString();
+    const newProduct = {
+      id: newId,
+      ...productData
+    };
+    addProduct(newProduct); // Context will handle the update
+  } else {
+    // Update existing product using context
+    updateProduct(editingProduct.id, productData); // Context will handle the update
+  }
+  
+  // Close modal and reset form
+  setShowEditModal(false);
+  setEditingProduct(null);
+  setEditFormData({
+    name: '',
+    description: '',
+    price: '',
+    originalPrice: '',
+    category: 'Electronics',
+    stock: '',
+    image: '',
+    badge: '',
+    badgeColor: '#dc3545'
+  });
+};
+
+  const handleViewProduct = (productId) => {
+    window.open(`/product/${productId}`, '_blank');
+  };
 
   // Handle window resize
   useEffect(() => {
@@ -98,14 +220,6 @@ const AdminDashboard = () => {
     ]
   };
 
-  // Products Data
-  const products = [
-    { id: '#P001', name: 'Wireless Headphones', category: 'Electronics', price: 5999, stock: 128, status: 'In Stock', image: '/assets/product1.avif' },
-    { id: '#P002', name: 'Smart Watch Pro', category: 'Electronics', price: 8999, stock: 94, status: 'In Stock', image: '/assets/watch.png' },
-    { id: '#P003', name: 'Pro Runner Shoes', category: 'Fashion', price: 3499, stock: 76, status: 'Low Stock', image: '/assets/joggers.png' },
-    { id: '#P004', name: 'Smartphone X', category: 'Electronics', price: 24999, stock: 52, status: 'In Stock', image: '/assets/product3.png' },
-  ];
-
   // Orders Data
   const orders = [
     { id: '#ORD-7842', customer: 'dular fatima', date: '08 Feb 2026', amount: 12499, status: 'Delivered' },
@@ -130,9 +244,6 @@ const AdminDashboard = () => {
     { name: 'Pro Runner Shoes', sold: 76, price: 3499, image: '/assets/joggers.png' },
     { name: 'Smartphone X', sold: 52, price: 24999, image: '/assets/product3.png' },
   ];
-
-  // Settings tabs state
-  const [activeSettingsTab, setActiveSettingsTab] = useState('general');
 
   const getStatusBadge = (status) => {
     const colors = {
@@ -368,65 +479,313 @@ const AdminDashboard = () => {
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h1 className="h3 fw-bold text-dark">Products Management</h1>
-              <button className="btn btn-primary">
+              <button className="btn btn-primary" onClick={() => {
+                setEditingProduct(null);
+                setEditFormData({
+                  name: '',
+                  description: '',
+                  price: '',
+                  originalPrice: '',
+                  category: 'Electronics',
+                  stock: '',
+                  image: '',
+                  badge: '',
+                  badgeColor: '#dc3545'
+                });
+                setShowEditModal(true);
+              }}>
                 <i className="fas fa-plus me-2"></i> Add New Product
               </button>
             </div>
 
-            <div className="card border-0 shadow-sm">
-              <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
-                <h5 className="fw-bold mb-0">All Products</h5>
-                <div className="d-flex">
-                  <input type="text" className="form-control form-control-sm me-2" placeholder="Search products..." style={{ width: '200px' }} />
-                  <button className="btn btn-sm btn-outline-primary">Filter</button>
-                </div>
-              </div>
-              <div className="card-body p-0">
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>ID</th>
-                        <th>Product</th>
-                        <th>Category</th>
-                        <th>Price</th>
-                        <th>Stock</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {products.map((product, index) => (
-                        <tr key={index}>
-                          <td className="fw-semibold">{product.id}</td>
-                          <td>
-                            <div className="d-flex align-items-center">
-                              <img src={product.image} className="rounded me-2" width="40" height="40" alt={product.name} />
-                              <span>{product.name}</span>
-                            </div>
-                          </td>
-                          <td>{product.category}</td>
-                          <td>Rs.{product.price}</td>
-                          <td>{product.stock}</td>
-                          <td><span className={`badge ${getStatusBadge(product.status)}`}>{product.status}</span></td>
-                          <td>
-                            <button className="btn btn-sm btn-outline-primary me-1">
-                              <i className="fas fa-edit"></i>
-                            </button>
-                            <button className="btn btn-sm btn-outline-danger">
-                              <i className="fas fa-trash"></i>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {/* Search Bar */}
+            <div className="card border-0 shadow-sm mb-4">
+              <div className="card-body">
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="input-group">
+                      <span className="input-group-text bg-light border-0">
+                        <i className="fas fa-search"></i>
+                      </span>
+                      <input
+                        type="text"
+                        className="form-control bg-light border-0"
+                        placeholder="Search products..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6 text-end">
+                    <span className="text-muted">
+                      <i className="fas fa-box me-1"></i> {filteredProducts.length} products
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Products Table */}
+            <div className="card border-0 shadow-sm">
+              <div className="table-responsive">
+                <table className="table table-hover mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>ID</th>
+                      <th>Product</th>
+                      <th>Category</th>
+                      <th>Price</th>
+                      <th>Stock</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProducts.length > 0 ? (
+                      filteredProducts.map((product) => (
+                        <tr key={product.id}>
+                          <td className="fw-semibold">{product.id}</td>
+                          <td>
+                            <div className="d-flex align-items-center">
+                              <img 
+                                src={product.image || '/assets/placeholder.png'} 
+                                className="rounded me-2" 
+                                width="40" 
+                                height="40" 
+                                alt={product.name}
+                                style={{ objectFit: 'cover' }}
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = '/assets/placeholder.png';
+                                }}
+                              />
+                              <div>
+                                <span className="fw-semibold">{product.name}</span>
+                                <br />
+                                <small className="text-muted">{product.description?.substring(0, 30)}...</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="badge bg-info bg-opacity-10 text-info px-3 py-2">
+                              {product.category}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="fw-bold">Rs.{product.price}</span>
+                            {product.originalPrice && (
+                              <small className="text-muted text-decoration-line-through ms-2">
+                                Rs.{product.originalPrice}
+                              </small>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`badge ${product.stock < 20 ? 'bg-warning' : 'bg-success'} px-3 py-2`}>
+                              {product.stock} units
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${product.stock > 0 ? (product.stock < 20 ? 'bg-warning' : 'bg-success') : 'bg-danger'}`}>
+                              {product.stock > 0 ? (product.stock < 20 ? 'Low Stock' : 'In Stock') : 'Out of Stock'}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="btn-group" role="group">
+                              <button 
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() => handleEditClick(product)}
+                                title="Edit"
+                              >
+                                <i className="fas fa-edit"></i>
+                              </button>
+                              <button 
+                                className="btn btn-sm btn-outline-danger"
+                                onClick={() => handleDeleteClick(product)}
+                                title="Delete"
+                              >
+                                <i className="fas fa-trash"></i>
+                              </button>
+                              <button 
+                                className="btn btn-sm btn-outline-info"
+                                onClick={() => handleViewProduct(product.id)}
+                                title="View"
+                              >
+                                <i className="fas fa-eye"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="text-center py-5">
+                          <i className="fas fa-box-open fa-3x text-muted mb-3"></i>
+                          <h5>No products found</h5>
+                          <p className="text-muted">Try adjusting your search</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteModal && (
+              <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <div className="modal-dialog modal-dialog-centered">
+                  <div className="modal-content border-0 shadow-lg">
+                    <div className="modal-header border-0">
+                      <h5 className="modal-title fw-bold">Confirm Delete</h5>
+                      <button type="button" className="btn-close" onClick={() => setShowDeleteModal(false)}></button>
+                    </div>
+                    <div className="modal-body">
+                      <p>Are you sure you want to delete <strong>{productToDelete?.name}</strong>?</p>
+                      <p className="text-muted small mb-0">This action cannot be undone.</p>
+                    </div>
+                    <div className="modal-footer border-0">
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>
+                        Cancel
+                      </button>
+                      <button type="button" className="btn btn-danger" onClick={confirmDelete}>
+                        <i className="fas fa-trash me-2"></i>Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Add/Edit Product Modal */}
+            {showEditModal && (
+              <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <div className="modal-dialog modal-lg modal-dialog-centered">
+                  <div className="modal-content border-0 shadow-lg">
+                    <div className="modal-header border-0">
+                      <h5 className="modal-title fw-bold">
+                        {editingProduct ? 'Edit Product' : 'Add New Product'}
+                      </h5>
+                      <button type="button" className="btn-close" onClick={() => setShowEditModal(false)}></button>
+                    </div>
+                    <form onSubmit={handleEditSubmit}>
+                      <div className="modal-body">
+                        <div className="row">
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label fw-semibold">Product Name</label>
+                            <input
+                              type="text"
+                              name="name"
+                              className="form-control"
+                              value={editFormData.name}
+                              onChange={handleEditChange}
+                              required
+                            />
+                          </div>
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label fw-semibold">Category</label>
+                            <select
+                              name="category"
+                              className="form-select"
+                              value={editFormData.category}
+                              onChange={handleEditChange}
+                            >
+                              <option value="Electronics">Electronics</option>
+                              <option value="Fashion">Fashion</option>
+                              <option value="Accessories">Accessories</option>
+                              <option value="Footwear">Footwear</option>
+                              <option value="Gaming">Gaming</option>
+                            </select>
+                          </div>
+                          <div className="col-md-4 mb-3">
+                            <label className="form-label fw-semibold">Price (Rs.)</label>
+                            <input
+                              type="number"
+                              name="price"
+                              className="form-control"
+                              value={editFormData.price}
+                              onChange={handleEditChange}
+                              required
+                            />
+                          </div>
+                          <div className="col-md-4 mb-3">
+                            <label className="form-label fw-semibold">Original Price</label>
+                            <input
+                              type="number"
+                              name="originalPrice"
+                              className="form-control"
+                              value={editFormData.originalPrice}
+                              onChange={handleEditChange}
+                            />
+                          </div>
+                          <div className="col-md-4 mb-3">
+                            <label className="form-label fw-semibold">Stock</label>
+                            <input
+                              type="number"
+                              name="stock"
+                              className="form-control"
+                              value={editFormData.stock}
+                              onChange={handleEditChange}
+                              required
+                            />
+                          </div>
+                          <div className="col-12 mb-3">
+                            <label className="form-label fw-semibold">Description</label>
+                            <textarea
+                              name="description"
+                              rows="3"
+                              className="form-control"
+                              value={editFormData.description}
+                              onChange={handleEditChange}
+                            ></textarea>
+                          </div>
+                          <div className="col-12 mb-3">
+                            <label className="form-label fw-semibold">Image URL</label>
+                            <input
+                              type="text"
+                              name="image"
+                              className="form-control"
+                              value={editFormData.image}
+                              onChange={handleEditChange}
+                              placeholder="/assets/headphone2.png or filename.png"
+                            />
+                            <small className="text-muted">
+                              Use: /assets/filename.png or just filename.png
+                            </small>
+                          </div>
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label fw-semibold">Badge</label>
+                            <select
+                              name="badge"
+                              className="form-select"
+                              value={editFormData.badge}
+                              onChange={handleEditChange}
+                            >
+                              <option value="">No Badge</option>
+                              <option value="Sale">Sale</option>
+                              <option value="New">New</option>
+                              <option value="Best Seller">Best Seller</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="modal-footer border-0">
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                          Cancel
+                        </button>
+                        <button type="submit" className="btn btn-primary">
+                          <i className="fas fa-save me-2"></i>
+                          {editingProduct ? 'Update Product' : 'Add Product'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
 
+      // ... rest of the cases remain the same (orders, customers, analytics, settings, profile, account-settings, help-center)
       case 'orders':
         return (
           <div>
@@ -1556,24 +1915,6 @@ const AdminDashboard = () => {
           margin-top: auto;
         }
 
-        #sidebarToggle {
-          background-color: #0a192f;
-          color: white;
-          border: none;
-          width: 40px;
-          height: 40px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.3s;
-        }
-
-        #sidebarToggle:hover {
-          background-color: #083e77;
-          transform: scale(1.05);
-        }
-
         .text-gold {
           color: #d4af37 !important;
         }
@@ -1687,14 +2028,6 @@ const AdminDashboard = () => {
             width: 40px;
             height: 40px;
             font-size: 1.2rem;
-          }
-          
-          .dropdown-menu {
-            position: fixed !important;
-            top: 60px !important;
-            right: 10px !important;
-            left: auto !important;
-            min-width: 280px;
           }
           
           .btn-primary {
